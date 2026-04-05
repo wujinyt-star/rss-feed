@@ -1,0 +1,221 @@
+<p align="center"><img align="center" src="https://github.com/niilopoutanen/rss-feed/assets/60819607/eacb868c-77e1-46e0-aad1-b6f11223c02d" width=200/></p>
+<h1 align="center">RSS Feed</h1>
+
+
+<h3 align="center">An open source RSS reader for android.</h3>
+<p align="center">
+  <a href="https://play.google.com/store/apps/details?id=com.niilopoutanen.rss_feed">Download on Google Play</a>
+</p>
+
+<br>
+<h4 align="center">Contact:</h4>
+<p align="center">
+  <a href="mailto:niilo.poutanen@gmail.com">niilo.poutanen@gmail.com</a>
+</p>
+<br>
+package com.niilopoutanen.rss_feed.rss;
+
+import android.app.Activity;
+import android.content.Context;
+import android.content.Intent;
+import android.net.Uri;
+
+import androidx.activity.result.ActivityResult;
+
+import org.w3c.dom.Document;
+import org.w3c.dom.Element;
+import org.w3c.dom.NodeList;
+
+import java.io.BufferedReader;
+import java.io.ByteArrayInputStream;
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.InputStreamReader;
+import java.io.InvalidObjectException;
+import java.io.OutputStreamWriter;
+import java.util.ArrayList;
+import java.util.List;
+
+import javax.xml.parsers.DocumentBuilder;
+import javax.xml.parsers.DocumentBuilderFactory;
+
+public class Opml {
+    private static final String XML_HEADER = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>";
+    private static final String TEMPLATE =
+            "<opml version=\"1.0\">\n" +
+                "  <head>\n" +
+                    "    <title>RSS-Feed subscriptions</title>\n" +
+                "  </head>\n" +
+                "  <body>\n" +
+                    "%s\n" +
+                "  </body>\n" +
+            "</opml>";
+
+    public static String encode(List<Source> sources) {
+        StringBuilder content = new StringBuilder();
+
+        sources.forEach(source ->
+                content.append(String.format("    <outline text=\"%s\" type=\"rss\" xmlUrl=\"%s\" description=\"%s\" />\n",
+                        source.title, source.url, source.description)));
+
+        return String.format("%s\n%s", XML_HEADER, String.format(TEMPLATE, content));
+    }
+
+    public static List<Source> decode(String content) {
+        if(!isOpml(content)) return null;
+        List<Source> sources = new ArrayList<>();
+
+        try {
+            DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
+            DocumentBuilder builder = factory.newDocumentBuilder();
+            Document document = builder.parse(new ByteArrayInputStream(content.getBytes()));
+
+            NodeList outlineNodes = document.getElementsByTagName("outline");
+
+            for (int i = 0; i < outlineNodes.getLength(); i++) {
+                Element outlineElement = (Element) outlineNodes.item(i);
+                String title = outlineElement.getAttribute("text");
+                String url = outlineElement.getAttribute("xmlUrl");
+                String description = outlineElement.getAttribute("description");
+
+                Source source = new Source();
+                source.title = title;
+                source.url = url;
+                source.description = description;
+                if(source.url != null && !source.url.isEmpty()){
+                    sources.add(source);
+                }
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+
+        return sources;
+    }
+
+    public static boolean isOpml(String content) {
+        if(!content.contains("<opml")){
+            return false;
+        }
+        else if(!content.contains("<body")){
+            return false;
+        }
+        else if(!content.contains("outline")){
+            return false;
+        }
+
+        return true;
+    }
+
+
+    public static File cacheFile(String filename, String content, Context context) {
+        try {
+            String fileName =  filename + ".opml";
+
+            File tempFile = new File(context.getCacheDir(), fileName);
+
+            FileOutputStream fos = new FileOutputStream(tempFile);
+            OutputStreamWriter osw = new OutputStreamWriter(fos);
+            osw.write(content);
+            osw.close();
+
+            return tempFile;
+        } catch (Exception e) {
+            e.printStackTrace();
+            return null;
+        }
+    }
+    public static List<Source> loadData(ActivityResult result, Context context) throws IOException {
+        if (result.getResultCode() == Activity.RESULT_OK) {
+            Intent data = result.getData();
+            if(data == null || data.getData() == null){
+                throw new InvalidObjectException("No data");
+            }
+            Uri uri = data.getData();
+            if(uri.getPath() == null){
+                throw new InvalidObjectException("No path for data");
+            }
+
+            BufferedReader reader = null;
+            StringBuilder builder = new StringBuilder();
+            reader = new BufferedReader(new InputStreamReader(context.getContentResolver().openInputStream(uri)));
+
+            String line = "";
+            while ((line = reader.readLine()) != null)
+            {
+                builder.append(line);
+            }
+            reader.close();
+
+            String content = builder.toString();
+
+            return decode(content);
+        }
+        return null;
+    }
+}
+// Top-level build file where you can add configuration options common to all sub-projects/modules.
+buildscript {
+    repositories {
+        google()
+        mavenCentral()
+    }
+    dependencies {
+        classpath 'com.google.gms:google-services:4.4.2'
+        classpath 'com.google.firebase:perf-plugin:1.4.2'
+        classpath 'com.google.firebase:firebase-crashlytics-gradle:3.0.2'
+        classpath 'com.android.tools.build:gradle:8.10.0'
+    }
+}
+plugins {
+    id 'com.android.application' version '8.3.2' apply false
+    id 'com.android.library' version '8.3.2' apply false
+}
+# Project-wide Gradle settings.
+# IDE (e.g. Android Studio) users:
+# Gradle settings configured through the IDE *will override*
+# any settings specified in this file.
+# For more details on how to configure your build environment visit
+# http://www.gradle.org/docs/current/userguide/build_environment.html
+# Specifies the JVM arguments used for the daemon process.
+# The setting is particularly useful for tweaking memory settings.
+org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8
+# When configured, Gradle will run in incubating parallel mode.
+# This option should only be used with decoupled projects. More details, visit
+# http://www.gradle.org/docs/current/userguide/multi_project_builds.html#sec:decoupled_projects
+# org.gradle.parallel=true
+# AndroidX package structure to make it clearer which packages are bundled with the
+# Android operating system, and which are packaged with your app's APK
+# https://developer.android.com/topic/libraries/support-library/androidx-rn
+android.useAndroidX=true
+# Enables namespacing of each library's R class so that its R class includes only the
+# resources declared in the library itself and none from the library's dependencies,
+# thereby reducing the size of the R class for that library
+android.nonTransitiveRClass=true
+android.nonFinalResIds=true
+org.gradle.unsafe.configuration-cache=true
+pluginManagement {
+    repositories {
+        google()
+        mavenCentral()
+        gradlePluginPortal()
+    }
+}
+dependencyResolutionManagement {
+    repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+    repositories {
+        google()
+        mavenCentral()
+        maven { url 'https://jitpack.io' }
+    }
+}
+rootProject.name = "RSS-Feed"
+include ':app'
+include ':app:splash'
+include ':app:common'
+include ':app:rss'
+include ':app:parser'
+include ':app:database'
+include ':app:manager'
+
